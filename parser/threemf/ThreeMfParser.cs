@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Xml.Linq;
+using SlicerMeta.parser.gcode;
 
 namespace SlicerMeta.parser.threemf
 {
@@ -18,6 +19,9 @@ namespace SlicerMeta.parser.threemf
         public List<string> FileNames { get; private set; } = new List<string>();
         public List<FilamentInfo> Filaments { get; private set; } = new List<FilamentInfo>();
         public Image PlateImage { get; private set; }
+        
+        public SlicerMeta SlicerInfo { get; private set; }
+        public SlicerFileMeta FileInfo { get; private set; }
 
 
         public ThreeMfParser()
@@ -39,10 +43,29 @@ namespace SlicerMeta.parser.threemf
             {
                 ParseSliceInfoConfig(archive); // Parse slice_info.config
                 ExtractPlateImage(archive); // Extract plate_1.png
+                ParseGCodeInfo(archive);
             }
 
             return this;
         }
+        
+        
+        private void ParseGCodeInfo(ZipArchive archive)
+        { // Extract gcode metadata from the embedded file
+            var gcodeEntry = archive.GetEntry("Metadata/plate_1.gcode");
+            if (gcodeEntry == null)
+            {
+                Debug.WriteLine("Unable to find plate_1.gcode");
+                return;
+            }
+            using (var configStream = gcodeEntry.Open())
+            {
+                var meta = new GCodeParser().ParseFromStream(configStream);
+                SlicerInfo = meta.SlicerInfo;
+                FileInfo = meta.FileInfo;
+            }
+        }
+        
         
         private void ParseSliceInfoConfig(ZipArchive archive)
         {

@@ -14,94 +14,122 @@ namespace SlicerMeta.parser.gcode
         {
             using (var reader = new StreamReader(filePath))
             {
-                string line;
-                var inHeaderBlock = false;
-                var inThumbnailBlock = false;
-                var inThumbnailData = false;
-                var inConfigBlock = false;
-                var thumbnailDataBuilder = new StringBuilder();
-
-                var slicerMeta = new SlicerMeta();
-                var fileMeta = new SlicerFileMeta();
-                
-                while ((line = reader.ReadLine()) != null)
-                {
-                    // Trim leading and trailing whitespace
-                    line = line.Trim();
-
-                    switch (line)
-                    {
-                        // Check for HEADER_BLOCK_START and END
-                        case "; HEADER_BLOCK_START":
-                            inHeaderBlock = true;
-                            continue;
-                        case "; HEADER_BLOCK_END":
-                            inHeaderBlock = false;
-                            continue;
-                        // Check for THUMBNAIL_BLOCK_START and END
-                        case "; THUMBNAIL_BLOCK_START":
-                            inThumbnailBlock = true;
-                            continue;
-                        case "; THUMBNAIL_BLOCK_END":
-                            inThumbnailBlock = false;
-                            continue;
-                        // Check for CONFIG_BLOCK_START and END
-                        case "; CONFIG_BLOCK_START":
-                            inConfigBlock = true;
-                            continue;
-                        case "; CONFIG_BLOCK_END":
-                            inConfigBlock = false;
-                            continue;
-                    }
-
-                    // Parse header data
-                    if (inHeaderBlock) ParseHeaderLine(line, slicerMeta);
-                    else if (inThumbnailBlock)
-                    {
-                        // Parse thumbnail data
-                        if (line.StartsWith("; thumbnail begin"))
-                        {
-                            inThumbnailData = true;
-                            continue;
-                        }
-
-                        if (line == "; thumbnail end")
-                        {
-                            inThumbnailData = false;
-                            // Process the collected thumbnail data
-                            ProcessThumbnailData(thumbnailDataBuilder.ToString(), fileMeta);
-                            thumbnailDataBuilder.Clear();
-                            continue;
-                        }
-
-                        if (!inThumbnailData) continue;
-                        var base64Line = line.TrimStart(';', ' ');
-                        thumbnailDataBuilder.Append(base64Line);
-                    }
-                    else if (inConfigBlock) ParseConfigLine(line, fileMeta);
-                    else ParseAdditionalData(line, fileMeta);
-                }
-                return (slicerMeta, fileMeta);
+                return Parse(reader);
             }
         }
-        
+
+        public static (SlicerMeta, SlicerFileMeta) Parse(Stream stream)
+        {
+            using (var reader = new StreamReader(stream))
+            {
+                return Parse(reader);
+            }
+        }
+
+        private static (SlicerMeta, SlicerFileMeta) Parse(TextReader reader)
+        {
+            string line;
+            bool inHeaderBlock = false;
+            bool inThumbnailBlock = false;
+            bool inThumbnailData = false;
+            bool inConfigBlock = false;
+            var thumbnailDataBuilder = new StringBuilder();
+
+            var slicerMeta = new SlicerMeta();
+            var fileMeta = new SlicerFileMeta();
+
+            while ((line = reader.ReadLine()) != null)
+            {
+                // Trim leading and trailing whitespace
+                line = line.Trim();
+
+                switch (line)
+                {
+                    // Check for HEADER_BLOCK_START and END
+                    case "; HEADER_BLOCK_START":
+                        inHeaderBlock = true;
+                        continue;
+                    case "; HEADER_BLOCK_END":
+                        inHeaderBlock = false;
+                        continue;
+                    // Check for THUMBNAIL_BLOCK_START and END
+                    case "; THUMBNAIL_BLOCK_START":
+                        inThumbnailBlock = true;
+                        continue;
+                    case "; THUMBNAIL_BLOCK_END":
+                        inThumbnailBlock = false;
+                        continue;
+                    // Check for CONFIG_BLOCK_START and END
+                    case "; CONFIG_BLOCK_START":
+                        inConfigBlock = true;
+                        continue;
+                    case "; CONFIG_BLOCK_END":
+                        inConfigBlock = false;
+                        continue;
+                }
+
+                // Parse header data
+                if (inHeaderBlock)
+                {
+                    ParseHeaderLine(line, slicerMeta);
+                }
+                else if (inThumbnailBlock)
+                {
+                    // Parse thumbnail data
+                    if (line.StartsWith("; thumbnail begin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inThumbnailData = true;
+                        continue;
+                    }
+
+                    if (line.Equals("; thumbnail end", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inThumbnailData = false;
+                        // Process the collected thumbnail data
+                        ProcessThumbnailData(thumbnailDataBuilder.ToString(), fileMeta);
+                        thumbnailDataBuilder.Clear();
+                        continue;
+                    }
+
+                    if (!inThumbnailData) continue;
+
+                    var base64Line = line.TrimStart(';', ' ');
+                    thumbnailDataBuilder.Append(base64Line);
+                }
+                else if (inConfigBlock)
+                {
+                    ParseConfigLine(line, fileMeta);
+                }
+                else
+                {
+                    ParseAdditionalData(line, fileMeta);
+                }
+            }
+            
+            reader.Close();
+            reader.Dispose();
+            return (slicerMeta, fileMeta);
+        }
+
         private static void ParseHeaderLine(string line, SlicerMeta meta)
         {
             // Remove leading semicolons and whitespace
             line = line.TrimStart(';', ' ');
-            
+
             if (line.StartsWith("generated by"))
-            { // parse slicer meta data
+            {
+                // parse slicer meta data
                 meta.FromString(SlicerType.OrcaFF, line);
                 return;
             }
 
             if (line.StartsWith("model printing time"))
-            { // parse estimated print time 
+            {
+                // parse estimated print time 
                 meta.SetEta(line);
                 return;
             }
-            
+
             // Split the line into key and value
             //var separatorIndex = line.IndexOf(':');
             //if (separatorIndex <= -1) return;
@@ -109,7 +137,7 @@ namespace SlicerMeta.parser.gcode
             //var value = line.Substring(separatorIndex + 1).Trim();
             //HeaderData[key] = value;
         }
-        
+
         private static void ParseConfigLine(string line, SlicerFileMeta fileMeta)
         {
             // Remove leading semicolons and whitespace
@@ -123,6 +151,7 @@ namespace SlicerMeta.parser.gcode
                 fileMeta.PrinterModel = "Unknown";
                 return;
             }
+
             var key = line.Substring(0, equalsIndex).Trim();
             var value = line.Substring(equalsIndex + 1).Trim();
 
