@@ -1,4 +1,5 @@
-﻿using SlicerMeta.parser;
+﻿using System.Diagnostics;
+using SlicerMeta.parser;
 
 namespace SlicerMeta
 {
@@ -56,8 +57,17 @@ namespace SlicerMeta
 
         public void SetEta(string eta)
         {
+            // new format (1.3.0+)
+            // ; estimated printing time (normal mode) = 37m 30s
+            if (eta.Contains("estimated printing time"))
+            {
+                var newData = eta.Replace("estimated printing time (normal mode) = ", "").Split(' ');
+                PrintEta = newData[0] + newData[1];
+                return;
+            }
+            
+            // old format
             // model printing time: 43m 42s; total estimated time: 43m 42s
-            // 0        1       2    3   4     5      6       7     8   9
             var data = eta.Split(' ');
             PrintEta = data[8] + data[9];
         }

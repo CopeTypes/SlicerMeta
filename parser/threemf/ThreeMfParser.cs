@@ -41,6 +41,7 @@ namespace SlicerMeta.parser.threemf
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
             using (var archive = new ZipArchive(fs, ZipArchiveMode.Read))
             {
+                //Debug.WriteLine("Parsing file: " + filePath);
                 ParseSliceInfoConfig(archive); // Parse slice_info.config
                 ExtractPlateImage(archive); // Extract plate_1.png
                 ParseGCodeInfo(archive);
